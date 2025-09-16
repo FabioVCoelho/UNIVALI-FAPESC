@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      // Support either custom claim 'admin' or custom claim 'role' == 'admin'
+      return isSignedIn() && (
+        (request.auth.token.admin == true) ||
+        (request.auth.token.role == 'admin')
+      );
+    }
+
+    match /plants/{plantId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+        request.resource.data.keys().hasAll(['date','pasture','species','quantity','condicaoSolo','culture','fresh_weight','dry_weight']) &&
+        request.resource.data.updatedBy is string;
+      allow delete: if isAdmin();
+    }
+
+    match /plant_conflicts/{conflictId} {
+      // Any authenticated user can create a conflict record (repository does this on detection)
+      allow create: if isSignedIn();
+      // Only admins can read or resolve (delete/update) conflicts
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Fallback deny
+    match /{document=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}
